@@ -5,9 +5,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Dictionary;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -15,7 +13,6 @@ import javax.jms.JMSException;
 
 import org.apache.activemq.util.ByteArrayInputStream;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.poifs.filesystem.ODocumentInputStream;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
@@ -38,6 +35,7 @@ import com.lowagie.text.BadElementException;
 import com.lowagie.text.Cell;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
+import com.lowagie.text.Element;
 import com.lowagie.text.Font;
 import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
@@ -46,11 +44,19 @@ import com.lowagie.text.Phrase;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.Table;
 import com.lowagie.text.rtf.RtfWriter2;
+import com.lowagie.text.rtf.field.RtfPageNumber;
+import com.lowagie.text.rtf.field.RtfTOCEntry;
+import com.lowagie.text.rtf.field.RtfTableOfContents;
+import com.lowagie.text.rtf.field.RtfTitle;
+import com.lowagie.text.rtf.field.RtfTotalPageNumber;
+import com.lowagie.text.rtf.headerfooter.RtfHeaderFooter;
+import com.lowagie.text.rtf.style.RtfParagraphStyle;
 
 public class ExportService {
 	
 	private static final int MAX_IMAGE_WIDTH = 150;
 	private static final int MAX_IMAGE_HEIGHT = 150;
+	private Font headerFooterFont = new Font(Font.HELVETICA, 10);
 	
 	private VehiclesDao vehiclesDao = new VehiclesDao();
 	private MakersDao makersDao = new MakersDao();
@@ -58,11 +64,9 @@ public class ExportService {
 	private FuelTypesDao fuelTypesDao = new FuelTypesDao();
 	private MessagingService messagingService = new MessagingService();
 	
-	public void exportVehicleData(int id) throws NotFoundException {
-		Vehicle vehicle = vehiclesDao.getVehicle(id);
-		if (vehicle == null) {
-			throw new NotFoundException("Vehicle with ID=" + id + " not found");
-		}
+	public void exportVehicleData() throws NotFoundException {
+		List<Vehicle> vehicles = vehiclesDao.getVehicles();
+		
 		FileOutputStream output = null;
 		Document document = new Document(PageSize.A4);
 		RtfWriter2 writer = null;
@@ -73,102 +77,138 @@ public class ExportService {
 			document.addAuthor("ZeksDev");
 			document.addCreationDate();
 			document.open();
-
-			Paragraph title = new Paragraph();
-			title.setAlignment(Paragraph.ALIGN_CENTER);
-			title.setFont(new Font(Font.HELVETICA, 24));
-			title.add("VEHICLE DATA");
-			document.add(title);
+			RtfHeaderFooter header = new RtfHeaderFooter(new Paragraph("Adiutec - workshop example application"));
+			header.setAlignment(Paragraph.ALIGN_CENTER);
+			header.setType(RtfHeaderFooter.TYPE_HEADER);
+			header.paragraph().setFont(headerFooterFont);
+			document.add(header);
 			
-			Table table = new Table(3);
-			table.setWidths(new float[]{170, 90, 200});
-			table.getDefaultCell().setBorder(Rectangle.NO_BORDER);
-			Cell c1 = new Cell();
-			c1.setBorder(Rectangle.NO_BORDER);
-			c1.setRowspan(12);
-			if (vehicle.getImage() != null) {
-				byte[] resizedImage = vehicle.getImage();
-				Image image = Image.getInstance(resizedImage);
-				if (image.getWidth() > MAX_IMAGE_WIDTH || image.getHeight() > MAX_IMAGE_HEIGHT) {
-					image.scaleToFit(MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
+			document.add(new Paragraph());
+			
+			int counter = 0;
+			for (Vehicle vehicle : vehicles) {
+				Paragraph pHead = new Paragraph(vehicle.getMaker().getName() + " " + vehicle.getModel().getName() + " " + vehicle.getPlate());
+				pHead.setFont(RtfParagraphStyle.STYLE_HEADING_1);
+				pHead.setAlignment(Element.ALIGN_CENTER);
+				document.add(pHead);
+				
+				Table table = new Table(3);
+				table.setWidths(new float[]{170, 90, 200});
+				table.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+				Cell c1 = new Cell();
+				c1.setHorizontalAlignment(Element.ALIGN_TOP);
+				c1.setVerticalAlignment(Element.ALIGN_LEFT);
+				c1.setBorder(Rectangle.NO_BORDER);
+				c1.setRowspan(12);
+				if (vehicle.getImage() != null) {
+					byte[] resizedImage = vehicle.getImage();
+					Image image = Image.getInstance(resizedImage);
+					if (image.getWidth() > MAX_IMAGE_WIDTH || image.getHeight() > MAX_IMAGE_HEIGHT) {
+						image.scaleToFit(MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
+					}
+					image.setAlignment(Element.ALIGN_LEFT);
+					c1.addElement(image);
 				}
-				c1.addElement(image);
+				table.addCell(c1);
+				
+				
+				Cell cell = new Cell();
+				table.addCell(new Phrase("MAKER", RtfParagraphStyle.STYLE_NORMAL));
+				Phrase phrase = getPhrase();
+				phrase.add(vehicle.getMaker().getName());
+				cell.add(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("MODEL", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getModel().getName());
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("PLATE", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getPlate());
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("YEAR", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(Integer.toString(vehicle.getYear()));
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("COLOR", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getColor());
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("FUEL TYPE", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getFuelType().getName());
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("CHASIS #", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getVehicleId() != null ? vehicle.getVehicleId() : "-" );
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("ENGINE #", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getEngine() != null ? vehicle.getEngine() : "-" );
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("PRICE", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(new DecimalFormat("#,##0.00 CHF").format(vehicle.getPrice()));
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("POWER", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getPower() + " kW");
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("VOLUME", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getVolume() + " ccm");
+				cell = new Cell(phrase);
+				table.addCell(cell);
+				
+				table.addCell(new Phrase("WEIGHT", RtfParagraphStyle.STYLE_NORMAL));
+				phrase = getPhrase();
+				phrase.add(vehicle.getWeight() + " kg");
+				cell = new Cell(phrase);
+				table.addCell(cell);
+		
+				document.add(table);
+				if (vehicle.getDescription() != null && vehicle.getDescription().length() > 0) {
+					document.add(new Paragraph("Description: ", RtfParagraphStyle.STYLE_NORMAL));
+					Paragraph pDescription = new Paragraph(vehicle.getDescription(), RtfParagraphStyle.STYLE_NORMAL);
+					pDescription.setAlignment(Element.ALIGN_JUSTIFIED);
+					document.add(pDescription);
+				}
+
+				if (++counter == vehicles.size()) continue;
+				document.newPage();
 			}
-			table.addCell(c1);
-			table.addCell("MAKE");
-			Cell cell = new Cell();
-			Phrase phrase = getPhrase();
-			phrase.add(vehicle.getMaker().getName());
-			cell.add(phrase);
-			table.addCell(cell);
+
+			// Footer
+			Paragraph footerPar = new Paragraph();
+			footerPar.setFont(headerFooterFont);
+			footerPar.add("Page ");
+			footerPar.add(new RtfPageNumber());
+			footerPar.add(" of ");
+			footerPar.add(new RtfTotalPageNumber());
+			RtfHeaderFooter footer = new RtfHeaderFooter(footerPar);
+			footer.setType(RtfHeaderFooter.TYPE_FOOTER);
+			footer.setAlignment(Paragraph.ALIGN_RIGHT);
+			document.add(footer);
 			
-			table.addCell("MODEL");
-			phrase = getPhrase();
-			phrase.add(vehicle.getModel().getName());
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("PLATE");
-			phrase = getPhrase();
-			phrase.add(vehicle.getPlate());
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("YEAR");
-			phrase = getPhrase();
-			phrase.add(Integer.toString(vehicle.getYear()));
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("COLOR");
-			phrase = getPhrase();
-			phrase.add(vehicle.getColor());
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("FUEL TYPE");
-			phrase = getPhrase();
-			phrase.add(vehicle.getFuelType().getName());
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("CHASIS #");
-			phrase = getPhrase();
-			phrase.add(vehicle.getVehicleId() != null ? vehicle.getVehicleId() : "-" );
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("ENGINE #");
-			phrase = getPhrase();
-			phrase.add(vehicle.getEngine() != null ? vehicle.getEngine() : "-" );
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("PRICE");
-			phrase = getPhrase();
-			phrase.add(new DecimalFormat("#,###.00 CHF").format(vehicle.getPrice()));
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("POWER");
-			phrase = getPhrase();
-			phrase.add(vehicle.getPower() + " kW");
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("VOLUME");
-			phrase = getPhrase();
-			phrase.add(vehicle.getVolume() + " ccm");
-			cell = new Cell(phrase);
-			table.addCell(cell);
-			
-			table.addCell("WEIGHT");
-			phrase = getPhrase();
-			phrase.add(vehicle.getWeight() + " kg");
-			cell = new Cell(phrase);
-			table.addCell(cell);
-	
-			document.add(table);
 			
 
 		} catch (FileNotFoundException e) {
@@ -197,7 +237,7 @@ public class ExportService {
 	
 	private Phrase getPhrase() {
 		Phrase phrase = new Phrase();
-		phrase.setFont(new Font(Font.HELVETICA, 12, Font.BOLD));
+		phrase.setFont(RtfParagraphStyle.STYLE_NORMAL);
 		return phrase;
 	}
 	

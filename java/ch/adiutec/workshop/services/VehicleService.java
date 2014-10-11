@@ -3,14 +3,6 @@ package ch.adiutec.workshop.services;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.jms.Connection;
-import javax.jms.Message;
-import javax.jms.MessageProducer;
-import javax.jms.Session;
-import javax.jms.Topic;
-
-import org.apache.activemq.ActiveMQConnectionFactory;
-
 import ch.adiutec.workshop.data.FuelTypesDao;
 import ch.adiutec.workshop.data.MakersDao;
 import ch.adiutec.workshop.data.VehiclesDao;

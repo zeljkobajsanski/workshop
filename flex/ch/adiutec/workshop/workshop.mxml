@@ -264,11 +264,7 @@
 			
 			protected function exportToRtf(event:MouseEvent):void
 			{
-				if (vehicle.id == 0) {
-					Alert.show("Please choose saved vehicle", "Warning");
-					return;
-				}
-				exportService.exportVehicleData(vehicle.id);
+				exportService.exportVehicleData();
 			}
 			
 			protected function exportToExcel(event:MouseEvent):void

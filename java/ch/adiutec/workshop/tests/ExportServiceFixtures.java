@@ -15,7 +15,7 @@ public class ExportServiceFixtures {
 	@Test
 	public void export() throws Exception {
 		ExportService servcie = new ExportService();
-		servcie.exportVehicleData(1);
+		servcie.exportVehicleData();
 	}
 	
 	@Test
