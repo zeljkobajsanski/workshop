@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:views="ch.adiutec.workshop.views.*"
+			   minWidth="955" minHeight="600"
+			   creationComplete="init()">
+	
+	
+	
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<s:RemoteObject id="vehicleService"
+						showBusyCursor="true"
+						destination="vehicleService">
+			<s:method name="getMakers" 
+					  result="getMakers_resultHandler(event)" 
+					  fault="faultHandler(event)">	
+			</s:method>
+			<s:method name="saveVehicle"
+					  fault="faultHandler(event)"
+					  result="saveVehicle_resultHandler(event)">
+			</s:method>
+			<s:method name="getVehicles"
+					  fault="faultHandler(event)"
+					  result="getVehicles_resultHandler(event)">
+				
+			</s:method>
+			<s:method name="getFuelTypes"
+					  fault="faultHandler(event)"
+					  result="getFuelTypes_resultHandler(event)">
+			</s:method>
+		</s:RemoteObject>
+		<s:RemoteObject id="exportService"
+						destination="exportService"
+						fault="faultHandler(event)"
+						showBusyCursor="true">
+			<s:method name="exportVehicleData"
+					  fault="faultHandler(event)"
+					  result="rtfExport_resultHandler(event)">
+			</s:method>
+			<s:method name="exportToXsl"
+					  fault="faultHandler(event)"
+					  result="excelExport_resultHandler(event)">
+			</s:method>
+			<s:method name="importData"
+					  fault="Alert.show('Import failed', 'Error')"
+					  result="importSucced_resultHandler(event)">
+				
+			</s:method>
+			
+		</s:RemoteObject>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import ch.adiutec.workshop.entities.FuelType;
+			import ch.adiutec.workshop.entities.Maker;
+			import ch.adiutec.workshop.entities.Model;
+			import ch.adiutec.workshop.entities.Vehicle;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CollectionEvent;
+			import mx.events.FlexEvent;
+			import mx.events.IndexChangedEvent;
+			import mx.events.ListEvent;
+			import mx.messaging.AbstractConsumer;
+			import mx.messaging.events.MessageEvent;
+			import mx.messaging.messages.AsyncMessage;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.validators.Validator;
+			
+			import org.granite.gravity.Consumer;
+			
+			import spark.events.IndexChangeEvent;
+			
+			[Bindable]
+			private var makers:ArrayCollection;
+			[Bindable]
+			private var vehicle:Vehicle;
+			[Bindable]
+			private var vehicles:ArrayCollection;
+			[Bindable]
+			private var fuelTypes:ArrayCollection;
+			private var remoteUrl:String = "http://46.165.252.195:8080/workshop";
+			
+			private var consumer:Consumer = null;
+			
+			/**
+			 * Initialization code
+			 */
+			private function init():void
+			{
+				// JMS Consumers
+				consumer = new Consumer();
+				consumer.destination = "saveVehicle";
+				consumer.topic = "saveVehicle"; 
+				consumer.subscribe();
+				consumer.addEventListener(MessageEvent.MESSAGE, messageHandler);
+				
+				// Refresh data
+				refreshData(null);
+				
+				// Event handlers
+				vehicleView.btnNew.addEventListener(flash.events.MouseEvent.CLICK, newVehicle);
+				vehicleView.btnSave.addEventListener(MouseEvent.CLICK, saveVehicle);
+				vehicleView.btnRefresh.addEventListener(MouseEvent.CLICK, refreshData);
+				vehicleView.btnRtfExport.addEventListener(MouseEvent.CLICK, exportToRtf);
+				vehicleView.btnExcelExport.addEventListener(MouseEvent.CLICK, exportToExcel);
+				vehicleView.btnImport.addEventListener(MouseEvent.CLICK, importData);
+				vehicleView.grid.addEventListener(spark.events.GridSelectionEvent.SELECTION_CHANGE, vehicleSelected);
+				vehicleView.cmbMake.addEventListener(IndexChangeEvent.CHANGE, makerChanged);
+				vehicleView.cmbTypes.addEventListener(IndexChangeEvent.CHANGE, modelChanged);
+				vehicleView.cmbFuelType.addEventListener(IndexChangeEvent.CHANGE, fuelTypeChanged)
+			}
+			
+			/**
+			 * Callback when makers are loaded
+			 */
+			private function getMakers_resultHandler(event:ResultEvent):void
+			{
+				makers = new ArrayCollection();
+				for each (var m:Object in event.result as ArrayCollection) 
+				{
+					var maker:Maker = new Maker();
+					maker.convertFrom(m);
+					makers.addItem(maker);
+				}
+			}
+			
+			/**
+			 * Fault handler
+			 */
+			private function faultHandler(event:FaultEvent):void
+			{
+				Alert.show("Error: " + event.fault.message, "Error");
+			}
+			
+			/**
+			 * Refresh all data manually 
+			 */
+			private function refreshData(ev:MouseEvent) : void {
+				vehicleService.getMakers();
+				vehicleService.getFuelTypes();
+				vehicleService.getVehicles();
+				newVehicle(null);
+			}
+			
+			/**
+			 * Create new vehicle
+			 */
+			private function newVehicle(event:flash.events.MouseEvent):void {
+				vehicle = new Vehicle();
+				vehicleView.cmbMake.selectedIndex = -1;
+				vehicleView.cmbTypes.selectedIndex = -1;
+				vehicleView.cmbFuelType.selectedIndex = -1;
+				vehicleView.image.source = null;
+			}
+			
+			/**
+			 * Save vehicle 
+			 */
+			private function saveVehicle(event:flash.events.MouseEvent):void {
+				var result:Array = Validator.validateAll([vehicleView.validatorMake, vehicleView.validatorModel, vehicleView.validatorPlate]);
+				if (result.length > 0) {
+					Alert.show("Please corretct errors", "Warning");
+					return;
+				}
+				vehicleService.saveVehicle(vehicle);
+			}
+			
+			/**
+			 * Callback method after save
+			 */
+			private function saveVehicle_resultHandler(event:ResultEvent):void
+			{
+				var newId:int = event.result as int;
+				if (newId == 0) {
+					Alert.show("Vehicle isn't saved", "Warning");
+					return;
+				}
+				vehicle.id = newId;
+				Alert.show("Vehicle saved", "Info");
+			}
+			
+			/**
+			 * Callback when vehicles are loaded from server
+			 */
+			private function getVehicles_resultHandler(event:ResultEvent):void
+			{
+				convertVehicles(event.result as ArrayCollection);
+			}
+
+			/**
+			 * Callback when vehicle is selected
+			 */
+			private function vehicleSelected(ev:spark.events.GridSelectionEvent):void {
+				vehicle = vehicleView.grid.selectedItem as Vehicle;
+				updateSelectedVehicle(vehicle);	
+			}
+			
+			/**
+			 * Callback method from JMS
+			 */
+			private function messageHandler(event:MessageEvent):void 
+			{
+				var msg:AsyncMessage = event.message as AsyncMessage;
+				convertVehicles(msg.body.vehicles);
+				if (msg.body.vehicle != null && vehicle.id == msg.body.vehicle.id) {
+					vehicle = new Vehicle();
+					vehicle.convertFrom(msg.body.vehicle);
+					updateSelectedVehicle(vehicle);
+				}
+			}
+			
+			/***
+			 * Get fuel types callback method
+			 */
+			protected function getFuelTypes_resultHandler(event:ResultEvent):void
+			{
+				fuelTypes = new ArrayCollection();
+				for each (var ft:Object in event.result as ArrayCollection) 
+				{
+					var fuelType:FuelType = new FuelType();
+					fuelType.id = ft.id;
+					fuelType.name = ft.name;
+					fuelTypes.addItem(fuelType);
+				}
+			}
+			
+			/**
+			 * Export to rtf callback
+			 */
+			protected function rtfExport_resultHandler(event:ResultEvent):void
+			{
+				var urlReq:URLRequest = new URLRequest(remoteUrl + "/vehicle.rtf");
+				navigateToURL(urlReq);
+			}
+			
+			/**
+			 * Export to excel callback
+			 */
+			protected function excelExport_resultHandler(event:ResultEvent):void
+			{
+				var urlReq:URLRequest = new URLRequest(remoteUrl + "/vehicles.xls");
+				navigateToURL(urlReq);
+			}
+			
+			/**
+			 *  Helper method to convert vehicles loaded from server
+			 */
+			private function convertVehicles(vehicleCollection : ArrayCollection):void 
+			{
+				vehicles = new ArrayCollection();
+				for each (var v:Object in vehicleCollection) 
+				{
+					var vehicle:Vehicle = new Vehicle();
+					vehicle.convertFrom(v);
+					vehicles.addItem(vehicle);
+				}
+			}
+			
+			protected function exportToRtf(event:MouseEvent):void
+			{
+				if (vehicle.id == 0) {
+					Alert.show("Please choose saved vehicle", "Warning");
+					return;
+				}
+				exportService.exportVehicleData(vehicle.id);
+			}
+			
+			protected function exportToExcel(event:MouseEvent):void
+			{
+				exportService.exportToXsl();
+			}
+			
+			protected function makerChanged(event:IndexChangeEvent):void
+			{
+				vehicle.maker = vehicleView.cmbMake.selectedItem;
+				
+				vehicleView.cmbTypes.dataProvider = vehicle.maker.models;
+				var found:Boolean = false;
+				for each (var model:Model in vehicle.maker.models) 
+				{
+					if (vehicle.model != null && model.id == vehicle.model.id) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) 
+				{
+					vehicleView.cmbTypes.selectedIndex = -1;
+					vehicle.model = null;
+				}
+			}
+			
+			protected function modelChanged(event:IndexChangeEvent):void
+			{
+				vehicle.model = vehicleView.cmbTypes.selectedItem
+			}
+			
+			protected function fuelTypeChanged(event:IndexChangeEvent):void
+			{
+				vehicle.fuelType = vehicleView.cmbFuelType.selectedItem;
+			}
+			
+			private function updateSelectedVehicle(vehicle:Vehicle) : void {
+				if (vehicle == null) return;
+				// Select maker in dropdown list
+				var maker:Maker = vehicle.maker;
+				for each (var i:Maker in vehicleView.cmbMake.dataProvider) 
+				{
+					if (i.id == maker.id) {
+						vehicleView.cmbMake.selectedItem = i;
+						break;
+					}
+				}
+				vehicleView.cmbTypes.dataProvider = maker.models;
+				
+				// Select model in dropdown list
+				var model:Model = vehicle.model;
+				for each (var m:Model in vehicleView.cmbTypes.dataProvider) 
+				{
+					if (m.id == model.id) {
+						vehicleView.cmbTypes.selectedItem = m;
+						break;
+					}
+				}
+				
+				// Select fuel type in dropdown
+				if (vehicle.fuelType == null) {
+					vehicleView.cmbFuelType.selectedIndex = -1;
+				} else {
+					for each (var ft:FuelType in fuelTypes) 
+					{
+						if (ft.id == vehicle.fuelType.id) {
+							vehicleView.cmbFuelType.selectedItem = ft;
+							break;
+						}
+					}
+				}
+				
+				if (vehicle.image != null) {
+					vehicleView.image.source = vehicle.image;
+				} else {
+					vehicleView.image.source = null;
+				}
+			}
+			
+			protected function importData(event:MouseEvent):void
+			{
+				var fileRef:FileReference = new FileReference();
+				fileRef.addEventListener(Event.SELECT, selectImportFile);
+				fileRef.browse([new FileFilter("Excel", "*.xls")])
+			}
+			
+			protected function selectImportFile(event:Event):void
+			{
+				var fileRef:FileReference = event.currentTarget as FileReference;
+				fileRef.removeEventListener(Event.SELECT, selectImportFile);
+				fileRef.addEventListener(Event.COMPLETE, processImportFile);
+				fileRef.load();
+			}
+			
+			private function processImportFile(event:Event):void {
+				var fileRef:FileReference = event.currentTarget as FileReference;
+				exportService.importData(fileRef.data);
+			}
+			
+			protected function importSucced_resultHandler(event:ResultEvent):void
+			{
+				convertVehicles(event.result as ArrayCollection);
+				Alert.show("Import finished", "Info");
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<!--<views:Main x="0" y="41" width="100%" height="559" id="mainView" makes="{makers}" vehicle="{vehicle}" vehicles="{vehicles}">
+	</views:Main>-->
+	
+	<s:Label x="10" y="10" width="100%" fontSize="24" text="Workshop Example application"
+			 textAlign="center" verticalAlign="middle"/>
+	<views:VehicleView id="vehicleView" 
+					   x="10" y="41"
+					   makes="{makers}" vehicle="{vehicle}" vehicles="{vehicles}" fuelTypes="{fuelTypes}">
+	</views:VehicleView>
+	
+</s:Application>

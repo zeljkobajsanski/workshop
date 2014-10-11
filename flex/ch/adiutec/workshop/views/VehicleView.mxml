@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="1204" height="768">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		<mx:Validator id="validatorMake"
+					  required="true"
+					  source="{cmbMake}"
+					  property="selectedItem"
+					  triggerEvent="">
+			
+		</mx:Validator>
+		<mx:Validator id="validatorModel"
+					  required="true"
+					  source="{cmbTypes}"
+					  property="selectedItem"
+					  triggerEvent="">
+			
+		</mx:Validator>
+		<mx:StringValidator id="validatorPlate"
+							required="true"
+							source="{txtPlate}"
+							property="text"
+							triggerEvent="">
+			
+		</mx:StringValidator>
+		<s:NumberFormatter id="formatterForNumbers"
+						   negativeNumberFormat="0"
+						   useGrouping="true"
+						   fractionalDigits="2">
+		</s:NumberFormatter>
+		<s:NumberFormatter id="formatterForIntegers"
+						   useGrouping="true"
+						   fractionalDigits="0">
+			
+		</s:NumberFormatter>
+		<s:NumberFormatter id="formatterForYear"
+						   fractionalDigits="0"
+						   useGrouping="false">
+			
+		</s:NumberFormatter>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import ch.adiutec.workshop.entities.Vehicle;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			
+			[Bindable]
+			public var makes:ArrayCollection;
+			[Bindable]
+			public var models:ArrayCollection;
+			[Bindable]
+			public var vehicle:Vehicle;
+			[Bindable]
+			public var vehicles:ArrayCollection;
+			[Bindable]
+			public var fuelTypes:ArrayCollection;
+			
+			private var fileRef:FileReference;
+			
+			protected function loadImage(event:MouseEvent):void
+			{
+				var filer:FileFilter = new FileFilter("Images", "*.jpg;*.jpeg;*.png");
+				fileRef = new FileReference();
+				fileRef.browse([filer]);
+				fileRef.addEventListener(Event.SELECT, selectImage);
+			}
+			
+			private function selectImage(event:Event):void {
+				fileRef.removeEventListener(Event.SELECT, selectImage);
+				fileRef.addEventListener(Event.COMPLETE, loadImageComplete);
+				fileRef.load();
+			}
+			
+			private function loadImageComplete(event:Event):void {
+				fileRef.removeEventListener(Event.COMPLETE, loadImageComplete);
+				var bytes:ByteArray = new ByteArray();
+				fileRef.data.readBytes(bytes, 0, fileRef.data.length);
+				vehicle.image = bytes;
+				image.source = vehicle.image;
+			}
+			
+			private function loadBytesHandler(event:Event) : void {
+				var loaderInfo:LoaderInfo = (event.target as LoaderInfo);
+				loaderInfo.removeEventListener(Event.COMPLETE, loadBytesHandler);
+				image.source = Bitmap(loaderInfo.content);
+				vehicle.image = loaderInfo.bytes;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:DataGrid id="grid" 
+				x="0" y="0" 
+				width="364" height="396" 
+				requestedRowCount="4" 
+				dataProvider="{vehicles}" 
+				selectionMode="singleRow">
+		<s:columns>
+			<s:ArrayList>
+				<s:GridColumn dataField="plate" headerText="Plate"></s:GridColumn>
+				<s:GridColumn dataField="maker.name" headerText="Make"></s:GridColumn>
+				<s:GridColumn dataField="model.name" headerText="Model"></s:GridColumn>
+			</s:ArrayList>
+		</s:columns>
+		
+	</s:DataGrid>
+	<mx:TabNavigator x="375" y="0" width="697" height="396">
+		<s:NavigatorContent width="100%" height="100%" label="Basic info">
+			<s:Form x="0" y="10" width="362" chromeColor="#CCCCCC">
+				<s:FormItem width="234" height="136" label="Image">
+					<s:Image id="image" width="100" height="100"/>
+					<mx:LinkButton label="Load image..." color="#70B2EE" click="loadImage(event)"/>
+				</s:FormItem>
+				<s:FormItem width="347" label="Make" required="true">
+					<s:DropDownList id="cmbMake" labelField="name" dataProvider="{makes}" />
+				</s:FormItem>
+				<s:FormItem width="346" label="Type" required="true">
+					<s:DropDownList id="cmbTypes" labelField="name" />
+				</s:FormItem>
+				<s:FormItem width="346" label="Plate" required="true">
+					<s:TextInput id="txtPlate" text="@{vehicle.plate}" />
+				</s:FormItem>
+				<s:FormItem width="423" label="Fuel type">
+					<s:DropDownList id="cmbFuelType"
+									dataProvider="{fuelTypes}"
+									labelField="name">
+					</s:DropDownList>
+				</s:FormItem>
+				
+			</s:Form>
+			<s:Label x="386" y="17" fontWeight="bold" text="Description"/>
+			<s:BorderContainer x="379" y="38" width="306" height="126">
+				<s:RichEditableText x="0" y="0" 
+									width="100%" height="100%" 
+									paddingBottom="5" paddingLeft="5"
+									paddingRight="5" paddingTop="5"
+									text="@{vehicle.description}"/>
+			</s:BorderContainer>
+		</s:NavigatorContent>
+		<s:NavigatorContent width="100%" height="100%" label="Details">
+			<s:Form x="10" y="10" width="100%" height="100%">
+				<s:FormItem label="Vehicle ID">
+					<s:TextInput text="@{vehicle.vehicleId}" />
+				</s:FormItem>
+				<s:FormItem label="Engine #">
+					<s:TextInput text="@{vehicle.engine}"/>
+				</s:FormItem>
+				<s:FormItem label="Color">
+					<s:TextInput text="@{vehicle.color}"/>
+				</s:FormItem>
+				<s:FormItem width="361" label="Year">
+					<s:TextInput id="txtYear" 
+								 text="{formatterForYear.format(vehicle.year)}" 
+								 change="vehicle.year = formatterForYear.parseNumber(txtYear.text)" 
+								 focusOut="txtYear.text = formatterForYear.format(vehicle.year)" />
+				</s:FormItem>
+				<s:FormItem width="363" label="Price">
+					<s:TextInput id="txtPrice" 
+								 text="{formatterForNumbers.format(vehicle.price)}" 
+								 change="vehicle.price = formatterForNumbers.parseNumber(txtPrice.text)"
+								 focusOut="txtPrice.text = formatterForNumbers.format(vehicle.price)"/>
+				</s:FormItem>
+				<s:FormItem width="363" label="Odometer [km]">
+					<s:TextInput id="txtOdometer" 
+								 text="{formatterForIntegers.format(vehicle.odometer)}" 
+								 change="vehicle.odometer = formatterForIntegers.parseNumber(txtOdometer.text)" 
+								 focusOut="txtOdometer.text = formatterForIntegers.format(vehicle.odometer)"/>
+				</s:FormItem>
+			</s:Form>
+		</s:NavigatorContent>
+		<s:NavigatorContent width="100%" height="100%" label="Technical Details">
+			<s:Form x="10" y="10" width="100%" height="100%">
+				<s:FormItem width="420" label="Power [kW]">
+					<s:TextInput id="txtPower" 
+								 text="{formatterForIntegers.format(vehicle.power)}" 
+								 change="vehicle.power = formatterForIntegers.parseNumber(txtPower.text)" 
+								 focusOut="txtPower.text = formatterForIntegers.format(vehicle.power)" />
+				</s:FormItem>
+				<s:FormItem width="423" label="Engine Volume [ccm]">
+					<s:TextInput id="txtVolume" 
+								 text="{formatterForIntegers.format(vehicle.volume)}" 
+								 change="vehicle.volume = formatterForIntegers.parseNumber(txtVolume.text)" 
+								 focusOut="txtVolume.text = formatterForIntegers.format(vehicle.volume)"/>
+				</s:FormItem>
+				<s:FormItem width="423" label="Weight [kg]">
+					<s:TextInput id="txtWeight" 
+								 text="{formatterForIntegers.format(vehicle.weight)}" 
+								 change="vehicle.weight = formatterForIntegers.parseNumber(txtWeight.text)" 
+								 focusOut="txtWeight.text = formatterForIntegers.format(vehicle.weight)" />
+				</s:FormItem>
+				
+			</s:Form>
+		</s:NavigatorContent>
+	</mx:TabNavigator>
+	<s:Button id="btnSave" x="469" y="404" label="Save"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/save.png')"/>
+	<s:Button id="btnNew" x="376" y="404" label="New"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/gnome_document_new.png')"/>
+	<s:Button id="btnRefresh" x="0" y="404" width="103" height="36" label="Refresh"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/refresh.png')"/>
+	<s:Button id="btnRtfExport" x="827" y="404" label="RTF Export"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/rtf.png')"/>
+	<s:Button id="btnExcelExport" x="953" y="404" label="Excel Export"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/excel.png')"/>
+	<s:Button id="btnImport" x="111" y="404" label="Import"
+			  icon="@Embed('file:///C:/Users/zeksdev/Downloads/database_save.png')"/>
+</s:Group>

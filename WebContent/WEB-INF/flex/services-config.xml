@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<services-config>
+
+	<services>
+		<service id="granite-service" class="flex.messaging.services.RemotingService"
+			messageTypes="flex.messaging.messages.RemotingMessage">
+			<destination id="vehicleService">
+				<channels>
+					<channel ref="my-graniteamf" />
+				</channels>
+				<properties>
+					<scope>application</scope>
+					<source>ch.adiutec.workshop.services.VehicleService</source>
+				</properties>
+			</destination>
+			<destination id="exportService">
+				<channels>
+					<channel ref="my-graniteamf" />
+				</channels>
+				<properties>
+					<scope>application</scope>
+					<source>ch.adiutec.workshop.services.ExportService</source>
+				</properties>
+			</destination>
+		</service>
+		<service id="messaging-service" class="flex.messaging.services.MessagingService"
+			messageTypes="flex.messaging.messages.AsyncMessage">
+			<adapters>
+				<adapter-definition id="default"
+					class="org.granite.gravity.adapters.JMSServiceAdapter" default="true" />
+			</adapters>
+			<destination id="saveVehicle">
+				<channels>
+					<channel ref="my-gravityamf" />
+				</channels>
+				<properties>
+					<jms>
+						<destination-type>Topic</destination-type>
+						<connection-factory>java:comp/env/jms/flex/TopicConnectionFactory
+						</connection-factory>
+						<destination-jndi-name>java:comp/env/jms/saveVehicle
+						</destination-jndi-name>
+						<destination-name>saveVehicle</destination-name>
+						<acknowledge-mode>AUTO_ACKNOWLEDGE</acknowledge-mode>
+						<transacted-sessions>false</transacted-sessions>
+						<initial-context-environment>
+							<property>
+								<name>Context.PROVIDER_URL</name>
+								<value>tcp://46.165.252.195:61616</value>
+							</property>
+							<!-- <property>
+								<name>Context.PROVIDER_URL</name>
+								<value>tcp://localhost:61616</value>
+							</property> -->
+							<property>
+								<name>Context.INITIAL_CONTEXT_FACTORY</name>
+								<value>org.apache.activemq.jndi.ActiveMQInitialContextFactory
+								</value>
+							</property>
+						</initial-context-environment>
+					</jms>
+				</properties>
+			</destination>
+		</service>
+	</services>
+	<channels>
+		<channel-definition id="my-graniteamf"
+			class="mx.messaging.channels.AMFChannel">
+			<endpoint
+				uri="http://{server.name}:{server.port}/{context.root}/graniteamf/amf"
+				class="flex.messaging.endpoints.AMFEndpoint" />
+		</channel-definition>
+		<channel-definition id="my-gravityamf"
+			class="org.granite.gravity.channels.GravityChannel">
+			<endpoint
+				uri="http://{server.name}:{server.port}/{context.root}/gravity/amf"
+				class="flex.messaging.endpoints.AMFEndpoint" />
+		</channel-definition>
+	</channels>
+
+</services-config>
